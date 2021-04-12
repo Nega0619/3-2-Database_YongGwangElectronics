@@ -1,0 +1,1 @@
+﻿C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Microsoft\VC\v160\Microsoft.CppCommon.targets(230,5): warning MSB8018: No outputs specified for item "procTest.pc". Its custom build command will be skipped.

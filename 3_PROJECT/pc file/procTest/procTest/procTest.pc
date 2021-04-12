@@ -1,0 +1,904 @@
+// win32 Visual C 컴파일시 추가
+// 프로그램 가장 첫 줄에 추가할 것
+#define _CRT_SECURE_NO_WARNINGS
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <ctype.h>
+#include <string.h>
+#include <conio.h>
+#include <time.h>
+#include <windows.h>
+
+/* for oracle */
+#include <sqlda.h>
+#include <sqlca.h>
+#include <sqlcpr.h>
+
+void DB_connect();
+void printBonusList();
+void sql_error(char *msg);
+void print_menu();
+void accept_service();
+void get_repairhis(int uid);
+void init_yonggwang();
+void get_staff();
+int getRepairMonth(int temp);
+int getWeekno(int temp);
+int getDay(int temp);
+void showDatas(int temp);
+int getAge(int temp);
+void showRepairId();
+void candyEvent();
+int signup();
+void get_leak_parts();
+void get_customer();
+
+EXEC SQL BEGIN DECLARE SECTION;
+   VARCHAR uid[80];
+   VARCHAR pwd[20];
+EXEC SQL END DECLARE SECTION;
+
+#define getch() _getch()
+
+void main() {
+   int user_id = 0;
+   int num = 0;
+
+   DB_connect();
+   init_yonggwang();
+
+    do{
+	print_menu();
+	scanf("%d", &num);
+	switch(num){
+		case 1:
+			printf("-----------서비스를 접수합니다.----------");
+			accept_service();
+			break;
+		case 2:
+			printf("------서비스 접수 내역을 조회합니다.-----");
+			printf("유저 아이디를 입력해 주세요....\n");
+			scanf("%d", &user_id);
+			printf("user_id 출력 : %d\n", user_id);
+			get_repairhis(user_id);
+			break;
+		case 3:
+			printf("-----------직원을 조회합니다.-------------");
+			get_staff();
+			break;
+		case 4:
+			printf("-----------고객을 조회합니다.-------------");
+			get_customer();
+			break;
+		case 5:
+			printf("----------부품 재고를 조회합니다.---------");
+			printf("\n-----재고가 5개 이하로 남은 부품 목록-----");
+			get_leak_parts();
+			break;
+		case 6:
+			printf("-------------수능 이벤트------------------");
+			candyEvent();
+			break;
+		case 7:
+			printf("-----------용광전자 이달의 직원-----------");
+			printBonusList();
+			break;
+
+		case 8:
+			printf("프로그램을 종료합니다.\n 안녕히 가세요!\n");
+			exit(0);
+		default:
+			printf("1에서 7 사이의 숫자를 눌러주세요.");
+		}
+   }while(num>7);
+   
+
+   getch();
+}
+
+void DB_connect() {
+   strcpy((char *)uid.arr, "zstB7@//sedb.deu.ac.kr:1521/orcl");
+   uid.len = (short) strlen((char *)uid.arr);
+   strcpy((char *)pwd.arr, "77777777");
+   pwd.len = (short) strlen((char *)pwd.arr);
+   
+   EXEC SQL CONNECT :uid IDENTIFIED BY :pwd;
+
+   if(sqlca.sqlcode != 0 && sqlca.sqlcode != -1405) { //connect
+      printf("\7Connect error: %s ",sqlca.sqlerrm.sqlerrmc);
+      getch(); 
+      exit(-1);
+   }
+   printf("Oracle Connect SUCCESS by %s\n", uid.arr);
+}
+
+
+
+void sql_error(char *msg) {
+   char err_msg[128];		size_t buf_len, msg_len;
+   EXEC SQL WHENEVER SQLERROR CONTINUE;
+   printf("\n%s\n", msg);      
+   buf_len = sizeof(err_msg);
+   sqlglm(err_msg, &buf_len, &msg_len);   
+   printf("%.*s\n", msg_len, err_msg);
+   getch();
+   EXEC SQL ROLLBACK WORK;
+   exit(-1);
+}
+
+void print_menu(){
+   printf("1. 서비스 접수하기\n");
+   printf("2. 서비스 접수 내역\n");
+   printf("3. 직원관리\n");
+   printf("4. 고객관리\n");
+   printf("5. 부품관리\n");
+   printf("6. 이벤트\n");
+   printf("7. 이달의 직원\n");
+}
+
+void init_yonggwang(){
+   system("cls");
+   puts("\n\n              @@@@@@&                                       &@@@/                                     #@@@#                                     .@@@#          \n            (@@.   .@@(                               .#@@.   %@@*                                 .    /@@@                                      ,@@@         \n            &@/     .@@                         @@@@@@%*&@@/  *@@,                       .@@@@@@@@@@#   .@@@                              .%@@@/   @@@         \n             (@@@&&@@@.                                 (@@   *@@,                          /..@@.      .@@@                        /@@@@@#,...    @@@         \n           .#,  .*/@@(                            &@@#  *@    *@@,                            @@@# %@@@@@@@@                             #@@.      @@@         \n            @@@.    @@(                             @@#       *@@#&@@@.                    .@@@(@@#  */. @@@                            @@@(       @@@         \n   *@@&&%%%&&@@@@@@@@@@@@@@,                    ..,,/@&&@@@@@@@@@,,/%&                   /@@,   @@@      @@@                          *@@&,@@@@    @@@         \n     ,&@@@&(,                                 &@@@@@@#,        @@                               ,@@      %@&                        /@%     ,@@/   @@@@@@@@    \n               ./#(.                                           %(                                #       *@,                                       @@@         \n             &@@@%&@@%                                 (@@@@@@@*                               .%(.      **                                        @@@         \n            &@(     (@%                               .@@.    &@(                               &@@@                                               &@#         \n            #@&     (@&                               .@@     #@#                                 @@                                               #@.         \n              @@@@@@@%                                 ,@@@@@@@#                                   @@@@@@@@%                                       (*          \n                 ..                                        ,.                                        ,*,                                                       \n                                                                                                                                                               \n");
+   puts("                                                                용광전자에 오신 것을 환영합니다.         \n");
+}
+
+void accept_service(){
+	EXEC SQL BEGIN DECLARE SECTION;
+		int vPid;//Parts_id
+		varchar vParts[20];//Parts_name
+		varchar vRdetail[50];//Repair_detail
+		int vCid;//Customer_id
+		int vRid;//Repair_id
+		int vSid;//Staff_id
+		int Pprice;
+		
+		char sNTempBuf[32];//char for customer name
+		char sTTempBuf[32];//char for tel
+		char sDTempBuf[50];//char for Repair_detail
+		char sPTempBuf[32];//char for parts name
+		char test[32];
+		varchar vPname[20];//Product_name
+		varchar vPfield[20];//Product_field_name
+		varchar vRdate[20];//Repair_date
+
+		short iCid_ind;
+		short vCid_ind;
+		short vRid_ind;
+		short vSid_ind;
+		short vPid_ind;
+		short vPname_ind;
+		short vPfield_ind;
+		short vRdate_ind;
+		short vRdetail_ind;
+	EXEC SQL END DECLARE SECTION;
+
+	/*init start*/
+	int pro_num = 0;//product_number
+	int rdm = 0;//random value
+	int user_id = 0;
+
+	memset(&vRdetail, 0x00, sizeof(vRdetail));
+	memset(&vParts, 0x00, sizeof(vParts));
+
+	memset(&vPname, 0x00, sizeof(vPname));
+	memset(&vPfield, 0x00, sizeof(vPfield));
+	memset(&vRdate, 0x00, sizeof(vRdate));
+
+	memset(&sNTempBuf, 0x00, sizeof(sNTempBuf));
+	memset(&sTTempBuf, 0x00, sizeof(sTTempBuf));
+	memset(&sDTempBuf, 0x00, sizeof(sDTempBuf));
+	memset(&sPTempBuf, 0x00, sizeof(sPTempBuf));
+	memset(&test, 0x00, sizeof(test));
+	vCid = 0;
+	vRid = 0;
+	vSid = 0;
+	vPid = 0;
+	iCid_ind = -1;
+	Pprice = 0;
+
+	vCid_ind = -1;
+	vRid_ind = -1;
+	vSid_ind = -1;
+	vPid_ind = -1;
+	vPname_ind = -1;
+	vPfield_ind = -1;
+	vRdate_ind = -1;
+	vRdetail_ind = -1;
+	/*init end*/
+	
+	printf("------------서비스 접수--------------\n");
+	printf("*이름과 전화번호를 입력해 주세요*\n");
+	gets();
+	printf("이름 : ");
+	gets(sNTempBuf);
+	printf("전화번호 : ");
+	gets(sTTempBuf);
+	//printf(sTempBuf);
+
+	EXEC SQL select customer_id into :vCid:iCid_ind from customer where customer_name = :sNTempBuf and tel = :sTTempBuf;
+	
+	if(iCid_ind == -1){
+		printf("회원가입이 필요합니다!\n");
+		vCid = signup();
+		printf("새로 회원가입 된 고객의 id값 : [%d]\n", vCid);
+	}
+	else{
+		printf("id값 = [%d]\n\n", vCid);
+	}
+
+	printf("수리할 제품을 선택하세요\n");
+	printf("1. 휴대폰 2. 패드 3. 스마트 워치\n");
+	
+	do{
+		scanf("%d", &pro_num);
+		switch(pro_num){
+			case 1:
+				strcpy((char*)vPname.arr, "용광폰");
+				vPname.len = strlen(vPname.arr);
+				strcpy((char*)vPfield.arr, "휴대폰");
+				vPfield.len = strlen(vPfield.arr);
+				printf("%s, %s\n", vPname.arr, vPfield.arr);
+				break;
+			case 2:
+				strcpy((char*)vPname.arr, "용광패드");
+				vPname.len = strlen(vPname.arr);
+				strcpy((char*)vPfield.arr, "패드");
+				vPfield.len = strlen(vPfield.arr);
+				printf("%s, %s\n", vPname.arr, vPfield.arr);
+				break;
+			case 3:
+				strcpy((char*)vPname.arr, "용광 워치");
+				vPname.len = strlen(vPname.arr);
+				strcpy((char*)vPfield.arr, "스마트 워치");
+				vPfield.len = strlen(vPfield.arr);
+				printf("%s, %s\n", vPname.arr, vPfield.arr);
+				break;
+			default:
+				printf("1에서 3까지의 숫자를 선택하세요!\n");
+		}
+	}while(pro_num>3);
+	
+	EXEC SQL select max(repair_id)+1 into :vRid from repairhis;
+	user_id = vCid;
+	printf("user_id값 : %d", user_id);
+	rdm = rand()%4 + 5001;
+	printf("rdm 값 : %d\n", rdm);
+	vSid = rdm;
+	EXEC SQL select to_char(sysdate, 'YYYY-MM-DD') into :vRdate from dual;
+	EXEC SQL insert into REPAIRHIS(repair_id, staff_id, customer_id, device_name, repair_date, repair_field) values (:vRid, :vSid, :vCid, :vPname, :vRdate, :vPfield);
+
+	printf("수리내역 연번 : %d 직원 번호 : %d 고객 번호 : %d 수리 제품 : %s 수리 분야 : %s 수리 일자 : %s\n", vRid, vSid, vCid, vPname.arr, vPfield.arr, vRdate.arr);
+	EXEC SQL commit work;
+	
+	printf("---------------------수리 접수 완료---------------------\n\n");
+
+	printf("상세 수리 내역 : ");
+	gets(test);
+	gets(sDTempBuf);
+	strcpy((char*)vRdetail.arr, sDTempBuf);
+	vRdetail.len = strlen(vRdetail.arr);
+	//printf("확인 : %s\n", vRdetail.arr);
+	
+	printf("사용한 부품 : ");
+	gets(sPTempBuf);
+	strcpy((char*)vParts.arr, sPTempBuf);
+	vParts.len = strlen(vParts.arr);
+	//printf("확인 : %s\n", vParts.arr);
+
+	EXEC SQL select part_id into :vPid:vPid_ind from parts where part_name = :vParts;
+
+	if(vPid_ind == -1){
+		printf("부품은 사용하지 않았음\n");
+		vPid = 0;
+		EXEC SQL update repairhis set part_id = :vPid, repair_detail = :vRdetail where repair_id = :vRid;
+	}
+	else{
+		EXEC SQL update repairhis set part_id = :vPid, repair_detail = :vRdetail where repair_id = :vRid;
+	}
+	
+	EXEC SQL commit work;
+	Sleep(1500);
+	printf("------------------------수리 완료-----------------------\n");
+	printf("수리 일자 : %s 수리내역 연번 : %d 직원 번호 : %d 고객 번호 : %d\n 수리 제품 : %s 수리 분야 : %s \n사용 부품 : %s, 수리 상세내역 : %s\n\n", vRdate.arr, vRid, vSid, vCid, vPname.arr, vPfield.arr, vParts.arr, vRdetail.arr);
+	Sleep(1000);
+	printf("------------------수리 내역 영수증 출력-----------------\n");
+	EXEC SQL select price into :Pprice from parts where part_id = :vPid;
+	printf("수리 일자 : %s 수리 내역 연번 : %d\n사용 부품 : %s 가격 : %d\n수리 상세내역 : %s\n", vRdate.arr, vRid, vParts.arr, Pprice, vRdetail.arr);
+
+}
+
+int signup(){
+   /*회원가입*/
+   EXEC SQL BEGIN DECLARE SECTION;   /*SQL에서 사용할 호스트 변수 선언*/
+      int cloginId;
+      char cloginName[32];
+      char cloginTel[32];
+      char cloginAdd[32];
+   EXEC SQL END DECLARE SECTION;
+
+   cloginId = 0;   /*변수 초기화*/
+   memset(&cloginName, 0x00, sizeof(cloginName));
+   memset(&cloginTel, 0x00, sizeof(cloginTel));
+   memset(&cloginAdd, 0x00, sizeof(cloginAdd));
+
+   printf("정보를 입력하세요.\n");
+
+   printf("이름 : ");
+   gets(cloginName);   /*gets로 cloginName 변수에 이름을 입력받음*/
+
+   printf("\n전화번호 : ");
+   gets(cloginTel);   /*gets로 cloginTel 변수에 전화번호를 입력받음*/
+
+   printf("\n주소 : ");
+   gets(cloginAdd);   /*gets로 cloginAdd 변수에 주소를 입력받음*/
+
+   EXEC SQL SELECT CUSTOMER_ID into :cloginId               /*CUSTOMER_ID를 호스트 변수 cloginId로 입력*/
+   FROM (SELECT * FROM CUSTOMER ORDER BY CUSTOMER_ID DESC)      /*CUSTOMER 테이블에 대해 내림차순 정렬*/
+   WHERE ROWNUM = 1;                                 /*ROWNUM 을 사용하여 CUSTOMER_ID에 대한 내림차순 정렬 중 맨 위의 컬럼 선택*/
+
+   EXEC SQL insert into CUSTOMER values (:cloginId + 1, :cloginName, :cloginTel, :cloginAdd);   /*CUSTOMER 테이블의 각 값에 해당하는 호스트 변수를 입력*/
+
+   EXEC SQL commit work; //release;   /*SQL문 커밋*/
+
+   cloginId = cloginId + 1; /*리턴해주기 위한 연산*/
+   return cloginId;       /*리턴*/
+}
+
+void get_repairhis(int uid)
+{
+/* --------------------------------------------------------------------------
+   Retrieve the current maximum employee number
+-------------------------------------------------------------------------- */
+EXEC SQL BEGIN DECLARE SECTION;
+   int customerid = uid;
+   int iRepair_id;
+   int iCustomer_id;
+   int iPrice;
+   VARCHAR vCustomer_name[20];
+   VARCHAR vPart_name[20];
+   VARCHAR vStaff_name[20];
+   VARCHAR vDevice_name[20];
+   VARCHAR vRepair_date[20];
+   VARCHAR vRepair_field[20];
+   VARCHAR vRepair_detail[50];
+
+   short iRepair_id_ind;
+   short iCustomer_id_ind;
+   short iPrice_ind;
+   short vCustomer_name_ind;
+   short vPart_name_ind;
+   short vDevice_name_ind;
+   short vStaff_name_ind;
+   short vRepair_date_ind;
+   short vRepair_field_ind;
+   short vRepair_detail_ind;
+
+EXEC SQL END DECLARE SECTION;
+
+
+   memset(&vCustomer_name, 0x00, sizeof(vCustomer_name));
+   memset(&vPart_name, 0x00, sizeof(vPart_name));
+   memset(&vStaff_name, 0x00, sizeof(vStaff_name));
+   memset(&vDevice_name, 0x00, sizeof(vDevice_name));
+   memset(&vRepair_date, 0x00, sizeof(vRepair_date));
+   memset(&vRepair_field, 0x00, sizeof(vRepair_field));
+   memset(&vRepair_detail, 0x00, sizeof(vRepair_detail));
+
+
+   iRepair_id = 0;
+   iCustomer_id = 0;
+   iPrice = 0;
+   iRepair_id_ind = 0;
+   iCustomer_id_ind = 0;
+   iPrice_ind = 0;
+   vCustomer_name_ind = 0;
+   vPart_name_ind = 0;
+   vDevice_name_ind = 0;
+   vStaff_name_ind = 0;
+   vRepair_date_ind = 0;
+   vRepair_field_ind = 0;
+   vRepair_detail_ind = 0;
+
+   EXEC SQL DECLARE repairhis_cur CURSOR FOR
+   //select repair_id, repairhis.STAFF_ID, customer_id, parts.part_id,  repairhis.device_name, repairhis.REPAIR_DATE, repairhis.REPAIR_FIELD ,  parts.PRICE,  repairhis.REPAIR_DETAIL from parts, repairhis where parts.part_id = repairhis.part_id and customer_id = :customerid;
+   select REPAIRHIS.REPAIR_ID, customer.CUSTOMER_ID, customer.CUSTOMER_NAME, staff.STAFF_NAME, parts.PART_NAME, REPAIRHIS.DEVICE_NAME, REPAIRHIS.REPAIR_DATE, REPAIRHIS.REPAIR_FIELD, parts.PRICE, REPAIRHIS.REPAIR_DETAIL from customer, REPAIRHIS, staff, parts where REPAIRHIS.CUSTOMER_ID = customer.customer_id and staff.STAFF_ID = REPAIRHIS.STAFF_ID and parts.PART_ID = REPAIRHIS.PART_ID and staff.STAFF_ID = REPAIRHIS.STAFF_ID and repairhis.customer_id = :customerid;
+
+   EXEC sql open repairhis_cur;
+
+   exec sql whenever not found do break;
+
+  for (;;)
+   {
+      exec sql fetch repairhis_cur into
+         :iRepair_id:iRepair_id_ind,
+       :iCustomer_id:iCustomer_id_ind,
+       :vCustomer_name:vCustomer_name_ind,
+         :vStaff_name:vStaff_name_ind,
+         :vPart_name:vPart_name_ind,
+         :vDevice_name:vDevice_name_ind,
+         :vRepair_date:vRepair_date_ind,
+         :vRepair_field:vRepair_field_ind,
+       :iPrice:iPrice_ind,
+         :vRepair_detail:vRepair_detail_ind;
+       
+       
+   printf("\n");
+      printf("수리 내역 연번 = [%d]\n고객 ID = [%d]\n 고객 이름 = [%s]\n직원 이름 = [%s]\n 부품 이름 = [%s]\n 기기명 = [%s]\n 수리 일자 = [%s]\n 수리 부위 = [%s]\n 가격 = [%d]\n상세 내역 = [%s]\n", 
+     iRepair_id, iCustomer_id, vCustomer_name.arr, vStaff_name.arr, vPart_name.arr, vDevice_name.arr, vRepair_date.arr, vRepair_field.arr, iPrice, vRepair_detail.arr);
+   }
+   printf("\n");
+
+   EXEC SQL CLOSE repairhis_cur;
+}
+
+
+void get_staff()
+{
+/* --------------------------------------------------------------------------
+   Retrieve the current maximum employee number
+-------------------------------------------------------------------------- */
+EXEC SQL BEGIN DECLARE SECTION;
+   int iStaff_id;
+   VARCHAR vStaff_name[20];
+   VARCHAR vJumin[20];
+   VARCHAR vTel[20];
+   //VARCHAR vJoin_date[20];
+   VARCHAR vAccount[20];
+   int iSalary;
+   float fCustomer_rate;
+
+   short iStaff_id_ind;
+   short vStaff_name_ind;
+   short vJumin_ind;
+   short vTel_ind;
+   //short vJoin_date_ind;
+   short vAccount_ind;
+   short iSalary_ind;
+   short fCustomer_rate_ind;
+EXEC SQL END DECLARE SECTION;
+
+
+   memset(&vStaff_name, 0x00, sizeof(vStaff_name));
+   memset(&vJumin, 0x00, sizeof(vJumin));
+   memset(&vTel, 0x00, sizeof(vTel));
+   //memset(&vJoin_data, 0x00, sizeof(vJoin_data));
+   memset(&vAccount, 0x00, sizeof(vAccount));
+
+    iSalary = 0;
+    fCustomer_rate = 0;
+
+    iStaff_id_ind = 0;
+    vStaff_name_ind = 0;
+    vJumin_ind = 0;
+    vTel_ind = 0;
+    //vJoin_date_ind = 0;
+    vAccount_ind = 0;
+    iSalary_ind = 0;
+    fCustomer_rate_ind = 0;
+
+EXEC SQL DECLARE staff_cur CURSOR FOR
+   select * from staff;
+
+   EXEC sql open staff_cur;
+
+   exec sql whenever not found do break;
+
+   for (;;)
+   {
+      exec sql fetch staff_cur into
+         :iStaff_id:iStaff_id_ind,
+         :vStaff_name:vStaff_name_ind,
+         :vJumin:vJumin_ind,
+         :vTel:vTel_ind,
+         //:vJoin_date:vJoin_date_ind,
+         :vAccount:vAccount_ind,
+         :iSalary:iSalary_ind,
+         :fCustomer_rate:fCustomer_rate_ind;
+
+     printf("\n");
+      printf("ID = [%d]\n STAFF_NAME = [%s]\n JUMIN = [%s]\n TEL = [%s]\n ACCOUNT = [%s]\n SALARY = [%d]\n CUSTOMER_RATE[%1.1f]\n", iStaff_id, vStaff_name.arr, vJumin.arr, vTel.arr, vAccount.arr, iSalary, fCustomer_rate);
+     printf("\n");
+
+   }
+
+   EXEC SQL CLOSE staff_cur;
+}
+
+void get_leak_parts()
+{
+/* --------------------------------------------------------------------------
+   부족한 부품에 대한 정보를 알려주는 함수
+-------------------------------------------------------------------------- */
+EXEC SQL BEGIN DECLARE SECTION;
+   int iPart_id;
+   int iStock;
+   VARCHAR vPart_name[20];
+
+   short iPart_id_ind;
+   short iStock_ind;
+   short vPart_name_ind;
+EXEC SQL END DECLARE SECTION;
+
+
+   memset(&vPart_name_ind, 0x00, sizeof(vPart_name_ind));
+
+    iPart_id = 0;
+    iStock = 0;
+
+    iPart_id_ind = 0;
+    iStock_ind = 0;
+    vPart_name_ind = 0;
+
+EXEC SQL DECLARE part_cur CURSOR FOR
+   select part_id, part_name, stock  from parts where stock < 5;
+
+   EXEC sql open part_cur;
+
+   exec sql whenever not found do break;
+
+   for (;;)
+   {
+      exec sql fetch part_cur into
+         :iPart_id:iPart_id_ind,
+       :vPart_name:vPart_name_ind,
+         :iStock:iStock_ind;
+
+     printf("\n");
+      printf("부품 식별자 = [%d]\n부품 이름 = [%s]\n부품 재고 = [%d]\n", 
+     iPart_id, vPart_name.arr, iStock);
+     printf("\n");
+
+   }
+
+   EXEC SQL CLOSE part_cur;
+}
+
+void get_customer()
+{
+/* --------------------------------------------------------------------------
+   Retrieve the current maximum employee number
+-------------------------------------------------------------------------- */
+EXEC SQL BEGIN DECLARE SECTION;
+   int iCustomer_id;
+   VARCHAR vCustomer_name[20];
+   VARCHAR vTel[20];
+   VARCHAR vAddress[20];
+
+   short iCustomer_id_ind;
+   short vCustomer_name_ind;
+   short vTel_ind;
+   short vAddress_ind;
+
+EXEC SQL END DECLARE SECTION;
+
+
+   memset(&vCustomer_name, 0x00, sizeof(vCustomer_name));
+   memset(&vTel, 0x00, sizeof(vTel));
+   memset(&vAddress, 0x00, sizeof(vTel));
+
+    iCustomer_id = 0;
+    iCustomer_id_ind = 0;
+    vCustomer_name_ind = 0;
+    vTel_ind = 0;
+    vAddress_ind = 0;
+
+
+EXEC SQL DECLARE customer_cur CURSOR FOR
+   select * from customer;
+
+   EXEC sql open customer_cur;
+
+   exec sql whenever not found do break;
+
+
+   for (;;)
+   {
+      exec sql fetch customer_cur into
+         :iCustomer_id:iCustomer_id_ind,
+         :vCustomer_name:vCustomer_name_ind,
+         :vTel:vTel_ind,
+         :vAddress:vAddress_ind;
+
+     printf("\n");
+      printf("CUSTOMER ID = [%d]\n CUSTOMER NAME = [%s]\nTEL = [%s]\n ADDRESS = [%s]\n SALARY = [%d]\n", iCustomer_id, vCustomer_name.arr, vTel.arr, vAddress.arr);
+     printf("\n");
+   }
+
+   EXEC SQL CLOSE customer_cur;
+}
+
+int getRepairMonth(int temp)
+{
+   char nov[3], dec[3];
+   strcpy(nov, "11");
+   strcpy(dec, "12");
+
+   //printf("nov '%s' \n", nov);
+   //printf("dec '%s' \n", dec);
+
+   EXEC SQL BEGIN DECLARE SECTION;
+      char month[3];
+      int r_no = temp;
+   EXEC SQL END DECLARE SECTION;
+
+   EXEC SQL
+      select substr(repair_date, 6, 2)
+      into :month
+      from repairhis
+      where REPAIR_ID = :r_no;
+   
+   //printf("__month = %s \n", month);
+
+   int res = 0;
+
+   if( !strcmp(month, nov) ) //month == 11 이면
+   {
+      res = 11;
+   }
+   else if( !strcmp(month, dec) ) //month == 12이면
+   {
+      res = 12;
+   }
+   else
+   {
+      res = 0;
+   }
+   //printf("res = %d\n\n", res);
+
+   return res;
+}
+
+int getWeekno(int temp)
+{
+   EXEC SQL BEGIN DECLARE SECTION;
+      char myWeekNo[2];
+      int r_no = temp;
+      int result;
+   EXEC SQL END DECLARE SECTION;
+
+   EXEC SQL
+      select case cast(TO_CHAR( TO_DATE( substr(to_char(repair_date), 3,6) || to_char('01'), 'YY/MM/DD')   , 'd') as INT)
+      when 1 then TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W')
+      when 2 then DECODE( cast (to_char(TO_date(repair_date, 'YY/MM/DD'), 'd')  as int ) , 2, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      3, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      4, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      5, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      6, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      7, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W') +1 )
+      when 3 then DECODE( cast (to_char(TO_date(repair_date, 'YY/MM/DD'), 'd')  as int ) , 3, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      4, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      5, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      6, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      7, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W') +1 )
+      when 4 then DECODE( cast (to_char(TO_date(repair_date, 'YY/MM/DD'), 'd')  as int ) , 4, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      5, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      6, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      7, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W') +1 )
+      when 5 then DECODE( cast (to_char(TO_date(repair_date, 'YY/MM/DD'), 'd')  as int ) , 5, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      6, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      7, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W') +1 )
+      when 6 then DECODE( cast (to_char(TO_date(repair_date, 'YY/MM/DD'), 'd')  as int ) , 6, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      7, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W') +1 )
+      when 7 then DECODE( cast (to_char(TO_date(repair_date, 'YY/MM/DD'), 'd')  as int ) , 7, TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W'),
+                                                                      TO_CHAR(TO_DATE(repair_date,'YY/MM/DD'), 'W') +1 )
+      end
+      into :myWeekNo
+      from repairhis
+      where REPAIR_ID = :r_no;
+      
+   result = atoi(myWeekNo);
+   //printf("\n%s \n", myWeekNo);
+   //printf("\n%d \n", result);
+
+   return result;
+}
+
+int getDay(int temp)
+{   
+   int result;
+
+   EXEC SQL BEGIN DECLARE SECTION;
+      char myWeekNo[2];
+      int r_no = temp;
+   EXEC SQL END DECLARE SECTION;
+
+   EXEC SQL
+      select TO_CHAR( TO_DATE(repair_date, 'YY/MM/DD')   , 'd')
+      into :myWeekNo
+      from repairhis
+      where REPAIR_ID = :r_no;
+
+   //printf("\n%s \n", myWeekNo);
+   result = atoi(myWeekNo);
+
+   return result;
+}
+
+void showDatas(int temp)
+{
+   EXEC SQL BEGIN DECLARE SECTION;
+      char customerBirth[20];
+      char repairDate[20];
+      int r_no = temp;
+   EXEC SQL END DECLARE SECTION;
+
+   EXEC SQL
+      select repair_date, CUSTOMER_BIRTH
+      into :repairDate, :customerBirth
+      from customer, repairhis
+      where customer.CUSTOMER_ID = repairhis.CUSTOMER_ID and repairhis.REPAIR_ID = :r_no;
+
+   printf("\n고객 생년 월일 : %s             수리 일자 : %s\n\n", repairDate, customerBirth);
+}
+
+
+int getAge(int temp)
+{
+   EXEC SQL BEGIN DECLARE SECTION;
+      int age;
+      int r_no = temp;
+   EXEC SQL END DECLARE SECTION;
+
+   EXEC SQL
+      select cast( substr(customer.CUSTOMER_BIRTH, 0,4) as int )
+      into :age
+      from customer, repairhis
+      where customer.CUSTOMER_ID = repairhis.CUSTOMER_ID 
+      and repairhis.REPAIR_ID = :r_no;
+
+   if( (2019-age +1) == 19 )
+   {
+      printf("고객님이 19살이에요! 수험생일 수도 있어요!\n");
+      return 1;
+   }
+   else
+   {
+      printf("이 고객님은 수험생일 가능성이 없네요!\n");
+      return 0;
+
+   }
+}
+
+void showRepairId()
+{
+printf("\n                 수리내역 번호 목록                  ");
+printf("\n\n");
+
+EXEC SQL BEGIN DECLARE SECTION;
+   int repair_his;
+EXEC SQL END DECLARE SECTION;
+
+   repair_his=0;
+
+EXEC SQL DECLARE his_cur CURSOR FOR
+   select repair_id from repairhis;
+
+   EXEC sql open his_cur;
+
+   exec sql whenever not found do break;
+
+   for (;;)
+   {
+      exec sql fetch his_cur into
+         :repair_his;
+
+      printf(" [%d]  ", repair_his);
+
+   }
+   EXEC SQL CLOSE his_cur;
+   printf("\n");
+}
+
+void candyEvent()
+{
+   int month = 0;
+   int weekNo = 0;
+   int day = 0;
+   int temp = 0;
+   printf("-----------------수험생 사탕 주기-----------------\n\n");
+   while(1){
+   showRepairId();
+   printf("\n\n조회할 수리내역 번호를 입력하세요 : ");
+   scanf("%d", &temp);
+   //temp = 156126;
+   showDatas(temp);
+   if (getAge(temp)) {
+      month = getRepairMonth(temp);
+
+      if (month == 12)
+      {
+         printf("수험생이에요! 사탕을 챙겨주세요!\n");
+      }
+      else if (month == 11)
+      {
+         //printf(" 11 ");
+         weekNo = getWeekno(temp);
+         //printf("weekno %d\n", weekNo);
+         if (weekNo == 4)
+         {
+            //printf(" 4쨰주 ");
+            day = getDay(temp);
+            //printf("day %d \n", day);
+            if (day > 4)
+            {
+               printf("수험생이에요! 사탕을 챙겨주세요!\n");
+            }
+            else
+            {
+               printf("수능 기간이 아니네요. 사탕 안줌.\n");
+            }
+         }
+         else if (weekNo > 4)
+         {
+            printf("수험생이에요! 사탕을 챙겨주세요!\n");
+         }
+         else
+         {
+               printf("수능 기간이 아니네요. 사탕 안줌.\n");
+         }
+      }
+      else
+      {
+               printf("수능 기간이 아니네요. 사탕 안줌.\n");
+      }
+
+   }
+   
+      printf("\n----------------- 사탕주기 이벤트 끝! -----------------\n\n");
+
+
+   }
+}
+
+
+void printBonusList()
+{
+EXEC SQL BEGIN DECLARE SECTION;
+int month;
+EXEC SQL END DECLARE SECTION;
+EXEC SQL
+select cast(to_char(sysdate, 'MM') as INT)
+into :month
+from dual;
+printf("\n%d월 보너스 상여급 지급 직원 목록입니다.\n\n", month);
+
+EXEC SQL BEGIN DECLARE SECTION;
+      VARCHAR vStaff_name[20];
+      int iSalary;
+
+      short vStaff_name_ind;
+      short iSalary_ind;
+   EXEC SQL END DECLARE SECTION;
+
+    memset(&vStaff_name, 0x00, sizeof(vStaff_name));
+   iSalary = 0;
+   vStaff_name_ind = 0;
+   iSalary_ind = 0;
+
+   EXEC SQL DECLARE staff_cur CURSOR FOR
+      select staff_name, salary*1.5  from staff where CUSTOMER_RATE = (select max(CUSTOMER_RATE)from staff);
+    
+   EXEC sql open staff_cur;
+   
+   EXEC sql whenever not found do break;
+
+   for (;;)
+    {
+      exec sql fetch staff_cur into
+         :vStaff_name:vStaff_name_ind,
+         :iSalary:iSalary_ind;
+
+      printf("STAFF_NAME = [%s], SALARY = [%d]\n", vStaff_name.arr, iSalary);
+
+    }
+
+
+
+   EXEC SQL CLOSE staff_cur;
+}
